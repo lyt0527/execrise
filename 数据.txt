@@ -1,0 +1,301 @@
+CREATE TABLE sgmw_big_data.DRIVER_DATA
+( 
+	`dealer_code` String,
+	`customer_name` String,
+	`mobile` String,
+	`protocol_card` String,
+	`created_at` DateTime,
+	`plan_status` String,
+	`driver_type` String,
+	`license` String,
+	`brand_name` String,
+	`model_name` String,
+	`config_name` String,
+	`employee_name` String,
+	`data_source` String,
+	`DATA_TIMESTAMP` DateTime
+) ENGINE = MergeTree PARTITION BY toYYYYMM(DATA_TIMESTAMP) ORDER BY DATA_TIMESTAMP SETTINGS index_granularity = 8192
+
+五菱地址：
+使用vpn进行访问
+
+ssh:
+96.4.0.10:22
+root/1Z26P18vXuqu8kP0
+
+
+运行命令行：
+/root/bak/streamsets-datacollector-3.11.0/bin/streamsets cli -U http://96.4.0.10:18630 -u admin -p admin manager start -n [pipeline] -R '{"startTime": "2019-12-03 00:00:00","endTime": "2019-12-04 00:00:00","projectId":"app2.0","table_name":"user_event_proj_app20"}'
+
+
+etl工具：streamset
+
+访问地址：http://172.22.14.115:8124
+
+登陆帐号：admin/admin
+
+
+数据统计分析工具：kylin
+
+访问地址:http://172.22.14.115:8102/kylin/
+
+登陆帐号：ADMIN/KYLIN
+
+
+展示工具：superset
+
+访问地址：http://172.22.14.115:8105
+
+登陆帐号:admin/admin
+
+tidb
+数据库：
+172.22.14.115：8097
+
+帐号密码：test1/CTPBI0oP24Z54Jfm
+
+埋点数据表：ele_contract下的user_event
+
+jdbc:mysql://96.4.1.45:30688/ele_contract
+
+账号名：watcher
+密码：egwtsO9&
+
+Hive Metadata
+jdbc:hive2://172.22.14.119:10000/testfirst
+
+用友地址：
+kylin
+地址改为：http://172.22.14.115:8110/kylin ADMIN/SgmwAdmin
+hive
+地址：172.22.14.115，端口:8111
+
+clickhouse地址：
+172.22.14.115:8112   default/gW6DO83Q
+
+用友测试mysql地址：
+172.22.14.115:8125
+用户：root
+密码：Sgmw5050@
+
+streamsets：
+172.22.14.115：8124 （使用vpn）
+
+---------用友测试环境-------
+hive:
+96.2.1.14:10000 (非转发）
+
+clickhouse:
+96.2.1.19:8123 (非转发）
+
+mysql：
+96.2.1.18:3306 （非转发）
+----------------------------
+六张表关联结果：
+--SELECT COUNT(1) FROM
+SELECT
+	(CASE
+		WHEN v.NAME is not null THEN v.NAME
+		WHEN v.NAME is null THEN ui.USER_NAME1
+		WHEN ui.USER_NAME1 is not null THEN ui.USER_NAME1
+		WHEN ui.USER_NAME1 is null THEN dd.CUSTOMER_NAME1
+		END) AS user_name,
+	rp.PHONE AS phone,
+	ui.NICKNAME1 AS nick_name,
+	toInt8OrZero(v.AGE) AS age,   
+	(CASE 
+		WHEN v.GENDER is not null THEN v.GENDER
+		WHEN v.GENDER is null THEN toString(ui.SEX1)
+		WHEN toString(ui.SEX1) is not null THEN toString(ui.SEX1)
+		WHEN toString(ui.SEX1) is null THEN toString(po.SEX1)
+		END) AS gender,
+	ui.PHOTO1 AS icon_url,
+	v.CUSTOMERTYPE AS customer_type,
+	(CASE 
+		WHEN v.BIRTH is null or v.BIRTH = '________' THEN null
+		WHEN v.BIRTH is not null THEN ui.BIRTHDAY1
+		WHEN ui.BIRTHDAY1 is not null THEN ui.BIRTHDAY1
+		WHEN ui.BIRTHDAY1 is null THEN (CASE WHEN po.BIRTHDAY1 is null or po.BIRTHDAY1 = '________' THEN null END)
+		END) AS birthday,
+	(CASE
+		WHEN v.IDTYPE is not null THEN v.IDTYPE
+		WHEN v.IDTYPE is null THEN ri.CERTIFICATE_TYPE1
+		END) AS certificate_type,
+	(CASE
+		WHEN v.IDNUMBER is not null THEN v.IDNUMBER
+		WHEN v.IDNUMBER is null THEN ri.CERTIFICATE_NO1
+		END) AS certificate_number,
+	(CASE 
+		WHEN v.PROVINCE is not null THEN v.PROVINCE
+		WHEN v.PROVINCE is null THEN ui.PROVINCE1
+		END) AS province,
+	(CASE 
+		WHEN v.CITY is not null THEN v.CITY
+		WHEN v.CITY is null THEN ui.CITY1
+		END) AS city,  
+	v.DISTRICT AS district,
+	v.TOWNSHIP AS township,
+	v.ACTUALADDRESS AS address,
+	ui.TRADE1 AS industry,
+	v.LITERACY AS education_level,
+	v.INCOMELEVELMONTHLY AS personal_mothly_income,
+	v.FAMILYLEVELMONTHLY AS family_mothly_income,
+	v.FAMILYNAME AS family_status,
+	v.SEATNUMBER AS telephone,
+	v.COMMONS AS remarks
+FROM
+	sgmw_big_data.RESULT_PHONE rp
+LEFT JOIN
+	(SELECT DISTINCT(CONTACTPHONE), NAME,AGE,GENDER,CUSTOMERTYPE,BIRTH,IDTYPE,IDNUMBER,PROVINCE,CITY,TOWNSHIP,DISTRICT,ACTUALADDRESS,LITERACY,INCOMELEVELMONTHLY,FAMILYLEVELMONTHLY,FAMILYNAME,SEATNUMBER,COMMONS FROM sgmw_big_data.VACTUALSALE WHERE DATA_TIMESTAMP BETWEEN '2019-10-27 21:27:30' AND '2020-01-07 00:00:00') v
+ON
+	rp.PHONE = v.CONTACTPHONE
+LEFT JOIN
+	(SELECT OWNER_TEL, arrayElement(groupArray(CERTIFICATE_NO),-1) CERTIFICATE_NO1, arrayElement(groupArray(CERTIFICATE_TYPE),-1) CERTIFICATE_TYPE1 FROM sgmw_big_data.REPAIR_INFO WHERE CERTIFICATE_NO is not null AND CERTIFICATE_TYPE is not null AND DATA_TIMESTAMP BETWEEN '2019-10-27 00:00:00' AND '2020-01-07 00:00:00' GROUP BY OWNER_TEL) ri
+ON
+	rp.PHONE = ri.OWNER_TEL
+LEFT JOIN
+	(SELECT MOBILE, arrayElement(groupArray(NICKNAME), -1) NICKNAME1,arrayElement(groupArray(TRADE), -1) TRADE1,arrayElement(groupArray(SEX), -1) SEX1,arrayElement(groupArray(PROVINCE), -1) PROVINCE1,arrayElement(groupArray(CITY), -1) CITY1,arrayElement(groupArray(USER_NAME), -1) USER_NAME1,arrayElement(groupArray(BIRTHDAY), -1) BIRTHDAY1, arrayElement(groupArray(PHOTO), -1) PHOTO1 FROM sgmw_big_data.USER_INFO WHERE DATA_TIMESTAMP BETWEEN '2019-10-27 00:00:00' AND '2020-01-07 00:00:00' GROUP BY MOBILE) ui 
+ON
+	rp.PHONE = ui.MOBILE
+LEFT JOIN
+	(SELECT MOBILE, arrayElement(groupArray(CUSTOMER_NAME), -1) CUSTOMER_NAME1 FROM sgmw_big_data.DRIVER_DATA WHERE CUSTOMER_NAME is not null AND DATA_TIMESTAMP BETWEEN '2019-10-27 00:00:00' AND '2020-01-07 00:00:00' GROUP BY MOBILE) dd
+ON
+	rp.PHONE = dd.MOBILE
+LEFT JOIN
+	(SELECT USERPHONE, arrayElement(groupArray(BIRTHDAY), -1) BIRTHDAY1,arrayElement(groupArray(SEX), -1) SEX1 FROM sgmw_big_data.PRODUCTS_ORDER WHERE BIRTHDAY is not null and SEX is not null AND DATA_TIMESTAMP BETWEEN '2019-10-27 00:00:00' AND '2020-01-07 00:00:00' GROUP BY USERPHONE) po
+ON
+	rp.PHONE = po.USERPHONE;
+
+----------------------------------------------
+2020-01-16 00:00:00
+SELECT
+	(CASE
+		WHEN v.NAME is not null THEN v.NAME
+		WHEN v.NAME is null THEN ui.USER_NAME1
+		WHEN ui.USER_NAME1 is not null THEN ui.USER_NAME1
+		WHEN ui.USER_NAME1 is null THEN dd.CUSTOMER_NAME1
+		END) AS user_name,
+	rp.PHONE AS phone,
+	ui.NICKNAME1 AS nick_name,
+	toInt8OrZero(v.AGE) AS age,   
+	(CASE 
+		WHEN v.GENDER is not null THEN v.GENDER
+		WHEN v.GENDER is null THEN toString(ui.SEX1)
+		WHEN toString(ui.SEX1) is not null THEN toString(ui.SEX1)
+		WHEN toString(ui.SEX1) is null THEN toString(po.SEX1)
+		END) AS gender,
+	ui.PHOTO1 AS icon_url,
+	v.CUSTOMERTYPE AS customer_type,
+	(CASE 
+		WHEN v.BIRTH is null or v.BIRTH = '________' THEN null
+		WHEN v.BIRTH is not null THEN ui.BIRTHDAY1
+		WHEN ui.BIRTHDAY1 is not null THEN ui.BIRTHDAY1
+		WHEN ui.BIRTHDAY1 is null THEN (CASE WHEN po.BIRTHDAY1 is null or po.BIRTHDAY1 = '________' THEN null END)
+		END) AS birthday,
+	(CASE
+		WHEN v.IDTYPE is not null THEN v.IDTYPE
+		WHEN v.IDTYPE is null THEN ri.CERTIFICATE_TYPE1
+		END) AS certificate_type,
+	(CASE
+		WHEN v.IDNUMBER is not null THEN v.IDNUMBER
+		WHEN v.IDNUMBER is null THEN ri.CERTIFICATE_NO1
+		END) AS certificate_number,
+	(CASE 
+		WHEN v.PROVINCE is not null THEN v.PROVINCE
+		WHEN v.PROVINCE is null THEN ui.PROVINCE1
+		END) AS province,
+	(CASE 
+		WHEN v.CITY is not null THEN v.CITY
+		WHEN v.CITY is null THEN ui.CITY1
+		END) AS city,  
+	v.DISTRICT AS district,
+	v.TOWNSHIP AS township,
+	v.ACTUALADDRESS AS address,
+	ui.TRADE1 AS industry,
+	v.LITERACY AS education_level,
+	v.INCOMELEVELMONTHLY AS personal_mothly_income,
+	v.FAMILYLEVELMONTHLY AS family_mothly_income,
+	v.FAMILYNAME AS family_status,
+	v.SEATNUMBER AS telephone,
+	v.COMMONS AS remarks
+FROM
+	sgmw_big_data.RESULT_PHONE rp
+LEFT JOIN
+	(SELECT DISTINCT(CONTACTPHONE), NAME,AGE,GENDER,CUSTOMERTYPE,BIRTH,IDTYPE,IDNUMBER,PROVINCE,CITY,TOWNSHIP,DISTRICT,ACTUALADDRESS,LITERACY,INCOMELEVELMONTHLY,FAMILYLEVELMONTHLY,FAMILYNAME,SEATNUMBER,COMMONS FROM sgmw_big_data.VACTUALSALE WHERE DATA_TIMESTAMP < '2020-01-16 00:00:00') v
+ON
+	rp.PHONE = v.CONTACTPHONE
+LEFT JOIN
+	(SELECT OWNER_TEL, arrayElement(groupArray(CERTIFICATE_NO),-1) CERTIFICATE_NO1, arrayElement(groupArray(CERTIFICATE_TYPE),-1) CERTIFICATE_TYPE1 FROM sgmw_big_data.REPAIR_INFO WHERE CERTIFICATE_NO is not null AND CERTIFICATE_TYPE is not null AND DATA_TIMESTAMP < '2020-01-16 00:00:00' GROUP BY OWNER_TEL) ri
+ON
+	rp.PHONE = ri.OWNER_TEL
+LEFT JOIN
+	(SELECT MOBILE, arrayElement(groupArray(NICKNAME), -1) NICKNAME1,arrayElement(groupArray(TRADE), -1) TRADE1,arrayElement(groupArray(SEX), -1) SEX1,arrayElement(groupArray(PROVINCE), -1) PROVINCE1,arrayElement(groupArray(CITY), -1) CITY1,arrayElement(groupArray(USER_NAME), -1) USER_NAME1,arrayElement(groupArray(BIRTHDAY), -1) BIRTHDAY1, arrayElement(groupArray(PHOTO), -1) PHOTO1 FROM sgmw_big_data.USER_INFO WHERE DATA_TIMESTAMP < '2020-01-16 00:00:00' GROUP BY MOBILE) ui 
+ON
+	rp.PHONE = ui.MOBILE
+LEFT JOIN
+	(SELECT MOBILE, arrayElement(groupArray(CUSTOMER_NAME), -1) CUSTOMER_NAME1 FROM sgmw_big_data.DRIVER_DATA WHERE CUSTOMER_NAME is not null AND DATA_TIMESTAMP < '2020-01-16 00:00:00' GROUP BY MOBILE) dd
+ON
+	rp.PHONE = dd.MOBILE
+LEFT JOIN
+	(SELECT USERPHONE, arrayElement(groupArray(BIRTHDAY), -1) BIRTHDAY1,arrayElement(groupArray(SEX), -1) SEX1 FROM sgmw_big_data.PRODUCTS_ORDER WHERE BIRTHDAY is not null and SEX is not null AND DATA_TIMESTAMP < '2020-01-16 00:00:00' GROUP BY USERPHONE) po
+ON
+	rp.PHONE = po.USERPHONE;
+
+
+----------------------------------------------
+
+select
+	u.user_id,
+	u.nickname,
+	u.user_name,
+	u.sex,
+	u.birthday,
+	p.province_name,
+	c.city_name,
+	un.trade
+from
+	jun_ucenter_pre.`user` u
+left join
+	jun_ucenter_pre.user_nature_jun un
+on
+	u.user_id = un.user_id
+left join 
+	jun_baseinfo_pre.city c
+on  
+	u.city_id=c.city_id
+left join 
+	jun_baseinfo_pre.province p
+on  
+	p.province_id=c.province_id;
+
+------------------------------------------------
+
+添加触发器：
+drop trigger if exists get_time;
+create trigger get_time 
+before insert on sgmw_big_data.user_info 
+for each row
+set new.DATA_TIMESTAMP = localtime();
+------------------------------------------------
+
+
+insert into sgmw_big_data.USER_INFO (USER_ID, GLOBAL_ID, USER_NO, NICKNAME, USER_NAME, SEX, MOBILE, PHOTO, BIRTHDAY, PROVINCE, CITY, TRADE, DATA_TIMESTAMP) 
+SELECT ui.user_id, ui.global_id, ui.user_no, ui.nickname, ui.user_name, ui.sex, ui.mobile, ui.photo, ui.birthday, ui.province, ui.city, ui.trade, ui.DATA_TIMESTAMP
+FROM sgmw_big_data_real_time.user_info ui;
+
+SELECT
+	count(1)
+FROM	
+	(SELECT DISTINCT(CONTACTPHONE), * FROM sgmw_big_data.VACTUALSALE) v
+LEFT JOIN
+	(SELECT DISTINCT(owner_tel), * FROM sgmw_big_data.REPAIR_INFO) ri
+ON
+	v.CONTACTPHONE = ri.owner_tel;
+
+---------------------------------------------------
+clickhouse去重：
+SELECT po.USERPHONE, arrayElement(groupArray(po.BIRTHDAY), -1) BIRTHDAY, arrayElement(groupArray(po.SEX), -1) SEX FROM sgmw_big_data.PRODUCTS_ORDER po GROUP BY po.USERPHONE;
+
+---------------------------------------------------
+抽取到clickhouse时间分区：
+${str:concat(str:concat('allpro','-'),time:extractLongFromDate(time:extractDateFromString(record:value('/DATA_TIMESTAMP'),'yyyy-MM-dd HH:mm:ss'), "yyyy-MM-dd"))}
